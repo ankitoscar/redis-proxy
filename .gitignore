@@ -1,0 +1,12 @@
+# Compiled binaries
+redis-proxy
+
+# Log files
+*.log
+test_proxy.log
+
+# OS-specific files
+.DS_Store
+
+# Test artifacts
+tmp/
