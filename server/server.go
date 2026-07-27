@@ -24,9 +24,10 @@ type Server struct {
 	backendsHealth map[string]bool
 	lb             loadbalancer.LoadBalancer
 	verbose        bool
+	password       string
 }
 
-func NewServer(addr string, backendConfigs []config.BackendConfig, lbStrategy string, verbose bool) (*Server, error) {
+func NewServer(addr string, backendConfigs []config.BackendConfig, lbStrategy string, verbose bool, password string) (*Server, error) {
 	backendsHealth := make(map[string]bool)
 	for _, cfg := range backendConfigs {
 		backendsHealth[cfg.Addr] = false
@@ -43,6 +44,7 @@ func NewServer(addr string, backendConfigs []config.BackendConfig, lbStrategy st
 		backendsHealth: backendsHealth,
 		lb:             lb,
 		verbose:        verbose,
+		password:       password,
 	}, nil
 }
 
@@ -88,7 +90,7 @@ func (s *Server) checkAllBackends() {
 
 	for _, cfg := range configs {
 		go func(addr string) {
-			online := checkBackendHealth(addr)
+			online := s.checkBackendHealth(addr)
 			s.mu.Lock()
 			prev := s.backendsHealth[addr]
 			s.backendsHealth[addr] = online
@@ -103,7 +105,7 @@ func (s *Server) checkAllBackends() {
 	}
 }
 
-func checkBackendHealth(addr string) bool {
+func (s *Server) checkBackendHealth(addr string) bool {
 	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
 	if err != nil {
 		return false
@@ -111,6 +113,32 @@ func checkBackendHealth(addr string) bool {
 	defer conn.Close()
 
 	conn.SetDeadline(time.Now().Add(1 * time.Second))
+
+	s.mu.RLock()
+	password := s.password
+	s.mu.RUnlock()
+
+	if password != "" {
+		authCmd := parser.Value{
+			Type: parser.TypeArray,
+			Array: []parser.Value{
+				{Type: parser.TypeBulkString, Str: "AUTH"},
+				{Type: parser.TypeBulkString, Str: password},
+			},
+		}
+		err = parser.WriteValue(conn, authCmd)
+		if err != nil {
+			return false
+		}
+		p := parser.NewParser(conn)
+		resp, err := p.Read()
+		if err != nil {
+			return false
+		}
+		if resp.Type != parser.TypeSimpleString || strings.ToUpper(resp.Str) != "OK" {
+			return false
+		}
+	}
 
 	pingCmd := parser.Value{
 		Type: parser.TypeArray,
@@ -146,65 +174,44 @@ func (s *Server) handleConnection(conn net.Conn) {
 		log.Printf("New client connection from: %s", conn.RemoteAddr())
 	}
 
+	// Capture the server configs and password
 	s.mu.RLock()
-	var healthyMasters []config.BackendConfig
-	var healthyBackends []config.BackendConfig
-	for _, cfg := range s.backendConfigs {
-		if s.backendsHealth[cfg.Addr] {
-			healthyBackends = append(healthyBackends, cfg)
-			if strings.ToLower(cfg.Role) == "master" {
-				healthyMasters = append(healthyMasters, cfg)
-			}
-		}
-	}
-
 	var masterCfg config.BackendConfig
-	if len(healthyMasters) > 0 {
-		masterCfg = healthyMasters[0]
-	} else {
-		// Last resort fallback
-		for _, cfg := range s.backendConfigs {
-			if strings.ToLower(cfg.Role) == "master" {
-				masterCfg = cfg
-				break
-			}
+	var readConfigs []config.BackendConfig
+	for _, cfg := range s.backendConfigs {
+		if strings.ToLower(cfg.Role) == "master" {
+			masterCfg = cfg
 		}
+		readConfigs = append(readConfigs, cfg)
 	}
-
-	var replicaCfg config.BackendConfig
-	if len(healthyBackends) > 0 {
-		var err error
-		replicaCfg, err = s.lb.Select(healthyBackends)
-		if err != nil {
-			replicaCfg = masterCfg
-		}
-	} else {
-		replicaCfg = masterCfg
-	}
+	password := s.password
 	s.mu.RUnlock()
 
-	if s.verbose {
-		log.Printf("Routing for client %s: Master=%s, Replica=%s", conn.RemoteAddr(), masterCfg.Addr, replicaCfg.Addr)
+	// If no master config was found (fallback), pick the first one from configs
+	if masterCfg.Addr == "" {
+		s.mu.RLock()
+		if len(s.backendConfigs) > 0 {
+			masterCfg = s.backendConfigs[0]
+		}
+		s.mu.RUnlock()
 	}
 
-	masterClient, err := backend.Connect(masterCfg.Addr)
+	masterClient, err := backend.Connect(masterCfg.Addr, password)
 	if err != nil {
 		log.Printf("Failed to connect to master backend %s: %v", masterCfg.Addr, err)
 		return
 	}
 	defer masterClient.Close()
 
-	var replicaClient *backend.Client
-	if replicaCfg.Addr == masterCfg.Addr {
-		replicaClient = masterClient
-	} else {
-		replicaClient, err = backend.Connect(replicaCfg.Addr)
-		if err != nil {
-			log.Printf("Failed to connect to replica backend %s: %v", replicaCfg.Addr, err)
-			return
+	// Maintain a map of active replica backend clients
+	replicaClients := make(map[string]*backend.Client)
+	defer func() {
+		for _, cli := range replicaClients {
+			if cli != nil {
+				cli.Close()
+			}
 		}
-		defer replicaClient.Close()
-	}
+	}()
 
 	p := parser.NewParser(conn)
 	for {
@@ -229,12 +236,52 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 		var activeClient *backend.Client
 		var destName string
+
 		if parser.IsWriteCommand(val) {
 			activeClient = masterClient
 			destName = "Master (" + masterCfg.Addr + ")"
 		} else {
-			activeClient = replicaClient
-			destName = "Replica (" + replicaCfg.Addr + ")"
+			// For read commands: query current healthy backends (including master)
+			s.mu.RLock()
+			var healthyReadConfigs []config.BackendConfig
+			for _, cfg := range readConfigs {
+				if s.backendsHealth[cfg.Addr] {
+					healthyReadConfigs = append(healthyReadConfigs, cfg)
+				}
+			}
+			strategy := s.lb
+			s.mu.RUnlock()
+
+			if len(healthyReadConfigs) > 0 {
+				selected, err := strategy.Select(healthyReadConfigs)
+				if err == nil {
+					if selected.Addr == masterCfg.Addr {
+						activeClient = masterClient
+						destName = "Master (" + masterCfg.Addr + ")"
+					} else {
+						// Check if we already have a connection to this replica
+						cli := replicaClients[selected.Addr]
+						if cli == nil {
+							cli, err = backend.Connect(selected.Addr, password)
+							if err == nil {
+								replicaClients[selected.Addr] = cli
+							} else {
+								log.Printf("Failed to connect to replica backend %s: %v", selected.Addr, err)
+							}
+						}
+						if cli != nil {
+							activeClient = cli
+							destName = "Replica (" + selected.Addr + ")"
+						}
+					}
+				}
+			}
+
+			// Fallback to master if no read backend is available/healthy or connection failed
+			if activeClient == nil {
+				activeClient = masterClient
+				destName = "Master (" + masterCfg.Addr + ")"
+			}
 		}
 
 		if s.verbose {
@@ -265,7 +312,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 }
 
-func (s *Server) Reload(backendConfigs []config.BackendConfig, lbStrategy string, verbose bool) error {
+func (s *Server) Reload(backendConfigs []config.BackendConfig, lbStrategy string, verbose bool, password string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -277,6 +324,7 @@ func (s *Server) Reload(backendConfigs []config.BackendConfig, lbStrategy string
 	s.backendConfigs = backendConfigs
 	s.lb = lb
 	s.verbose = verbose
+	s.password = password
 
 	newHealth := make(map[string]bool)
 	for _, cfg := range backendConfigs {

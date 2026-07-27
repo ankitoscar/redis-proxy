@@ -42,11 +42,13 @@ func startMockRedisServer(t *testing.T, response []byte) net.Listener {
 }
 
 func TestCheckBackendHealth(t *testing.T) {
+	srv := &Server{password: ""}
+
 	// Test case 1: Healthy server responding with +PONG
 	l1 := startMockRedisServer(t, []byte("+PONG\r\n"))
 	defer l1.Close()
 
-	if !checkBackendHealth(l1.Addr().String()) {
+	if !srv.checkBackendHealth(l1.Addr().String()) {
 		t.Errorf("expected health check to succeed for +PONG response")
 	}
 
@@ -54,7 +56,7 @@ func TestCheckBackendHealth(t *testing.T) {
 	l2 := startMockRedisServer(t, []byte("$4\r\nPONG\r\n"))
 	defer l2.Close()
 
-	if !checkBackendHealth(l2.Addr().String()) {
+	if !srv.checkBackendHealth(l2.Addr().String()) {
 		t.Errorf("expected health check to succeed for bulk string PONG response")
 	}
 
@@ -62,12 +64,12 @@ func TestCheckBackendHealth(t *testing.T) {
 	l3 := startMockRedisServer(t, []byte("-ERR mock error\r\n"))
 	defer l3.Close()
 
-	if checkBackendHealth(l3.Addr().String()) {
+	if srv.checkBackendHealth(l3.Addr().String()) {
 		t.Errorf("expected health check to fail for error response")
 	}
 
 	// Test case 4: Server port offline
-	if checkBackendHealth("127.0.0.1:9999") {
+	if srv.checkBackendHealth("127.0.0.1:9999") {
 		t.Errorf("expected health check to fail for offline port")
 	}
 }
@@ -80,7 +82,7 @@ func TestServerHealthCheckingLoop(t *testing.T) {
 		{Addr: l.Addr().String(), Role: "replica"},
 	}
 
-	srv, err := NewServer("127.0.0.1:16381", backendConfigs, "random", true)
+	srv, err := NewServer("127.0.0.1:16381", backendConfigs, "random", true, "")
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
@@ -180,7 +182,7 @@ func TestServerLoadBalancing(t *testing.T) {
 		{Addr: m2.Addr().String(), Role: "replica"},
 	}
 
-	srv, err := NewServer("127.0.0.1:0", backendConfigs, "random", true)
+	srv, err := NewServer("127.0.0.1:0", backendConfigs, "random", true, "")
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
@@ -232,7 +234,7 @@ func TestServerLoadBalancingRoundRobin(t *testing.T) {
 		{Addr: m2.Addr().String(), Role: "replica"},
 	}
 
-	srv, err := NewServer("127.0.0.1:0", backendConfigs, "round-robin", true)
+	srv, err := NewServer("127.0.0.1:0", backendConfigs, "round-robin", true, "")
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
