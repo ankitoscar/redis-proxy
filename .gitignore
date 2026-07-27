@@ -10,3 +10,7 @@ test_proxy.log
 
 # Test artifacts
 tmp/
+
+# Config files
+*.conf
+*.pid
