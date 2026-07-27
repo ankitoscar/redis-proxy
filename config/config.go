@@ -17,6 +17,7 @@ type Config struct {
 	Backends    []BackendConfig
 	LoadBalance string
 	Verbose     bool
+	Password    string
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -30,6 +31,7 @@ func LoadConfig(path string) (*Config, error) {
 		ListenAddr:  "127.0.0.1:16379", // default fallback
 		LoadBalance: "random",          // default strategy
 		Verbose:     false,             // default mode
+		Password:    "",                // default no password
 	}
 
 	scanner := bufio.NewScanner(file)
@@ -58,6 +60,8 @@ func LoadConfig(path string) (*Config, error) {
 			cfg.LoadBalance = val
 		case "verbose":
 			cfg.Verbose = (val == "true")
+		case "password":
+			cfg.Password = val
 		case "backend":
 			// Backend format: "addr role"
 			backendParts := strings.Fields(val)

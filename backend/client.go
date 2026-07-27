@@ -1,7 +1,9 @@
 package backend
 
 import (
+	"fmt"
 	"net"
+	"strings"
 	"redis-proxy/parser"
 )
 
@@ -10,15 +12,34 @@ type Client struct {
 	parser *parser.Parser
 }
 
-func Connect(addr string) (*Client, error) {
+func Connect(addr string, password string) (*Client, error) {
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
-	return &Client{
+	client := &Client{
 		conn:   conn,
 		parser: parser.NewParser(conn),
-	}, nil
+	}
+	if password != "" {
+		authCmd := parser.Value{
+			Type: parser.TypeArray,
+			Array: []parser.Value{
+				{Type: parser.TypeBulkString, Str: "AUTH"},
+				{Type: parser.TypeBulkString, Str: password},
+			},
+		}
+		resp, err := client.Execute(authCmd)
+		if err != nil {
+			conn.Close()
+			return nil, err
+		}
+		if resp.Type != parser.TypeSimpleString || strings.ToUpper(resp.Str) != "OK" {
+			conn.Close()
+			return nil, fmt.Errorf("AUTH failed: %s", resp.Str)
+		}
+	}
+	return client, nil
 }
 
 func (c *Client) Close() error {

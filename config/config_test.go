@@ -83,6 +83,27 @@ backend = 127.0.0.1:6379 master
 	if !cfgVerbose.Verbose {
 		t.Errorf("expected verbose to be true, got false")
 	}
+
+	// Test case 4: Parsing password setting
+	contentPassword := `
+listen_addr = 127.0.0.1:16379
+password = testsecretpassword
+backend = 127.0.0.1:6379 master
+`
+	pathPassword := filepath.Join(tmpDir, "proxy_password.conf")
+	err = os.WriteFile(pathPassword, []byte(contentPassword), 0644)
+	if err != nil {
+		t.Fatalf("failed to write temp config: %v", err)
+	}
+
+	cfgPassword, err := LoadConfig(pathPassword)
+	if err != nil {
+		t.Fatalf("failed to load valid config with password: %v", err)
+	}
+
+	if cfgPassword.Password != "testsecretpassword" {
+		t.Errorf("expected password to be 'testsecretpassword', got '%s'", cfgPassword.Password)
+	}
 }
 
 func TestLoadConfigFileNotFound(t *testing.T) {
