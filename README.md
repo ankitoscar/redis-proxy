@@ -1,31 +1,41 @@
-# Redis Read-Write Splitting Proxy
+# Redis Read-Write Splitting & Load-Balancing Proxy
 
-A high-performance Redis routing middleware built in Go. It parses commands using the Redis Serialization Protocol (RESP), identifies mutating (write) vs. query (read) commands, and dynamically routes traffic to Master or Replica instances.
+A high-performance Redis routing middleware built in Go. It parses commands using the Redis Serialization Protocol (RESP), identifies mutating (write) vs. query (read) commands, dynamically load-balances reads across healthy replicas, and supports zero-downtime hot-reloading.
 
 ---
 
 ## Features
 
-- **RESP Parsing & Serialization**: Custom built RESP parser and serializer supporting Simple Strings, Errors, Integers, Bulk Strings, and Arrays.
-- **Read/Write Splitting**: Mutating commands (e.g. `SET`, `DEL`, `LPUSH`, `HSET`) are automatically routed to the Master. Read-only queries (e.g. `GET`, `PING`) are routed to a Replica (falling back to Master if no replicas are available).
-- **Dynamic Configuration**: Supports specifying the proxy listener port and backend server topologies in a `.conf` file without modifying the code.
-- **Docker Compose Setup**: Quick local testing stack containing 1 Master Redis and 1 Replica Redis.
-- **Integration Test Runner**: Clean bash script to orchestrate and verify the end-to-end routing pipeline with detailed logs on failure.
+- **RESP Parsing & Serialization**: Custom-built RESP parser and serializer supporting Simple Strings, Errors, Integers, Bulk Strings, and Arrays.
+- **Read/Write Splitting**: Mutating commands (e.g., `SET`, `DEL`, `LPUSH`, `HSET`) are automatically routed to the Master. Read-only queries (e.g., `GET`, `PING`) are routed to Replicas (falling back to Master if no replicas are online).
+- **Request-Level Load Balancing**: Supports distributing read commands dynamically *per request* instead of per connection. Includes two load-balancing strategies:
+  - `random`: Randomly selects from the pool of healthy read backends.
+  - `round-robin`: Rotates sequentially through healthy read backends.
+- **Lazy Connection Management**: Lazily establishes and caches TCP connections to replica backends only when they are selected, optimizing resources.
+- **Dynamic Configuration & Hot-Reloading**: Supports zero-downtime config hot-reloading via `./redis-proxy reload` (using Unix `SIGHUP` signal), allowing strategy switches or backend list changes on the fly.
+- **Authentication & ACLs**: Authenticates connections to Redis backend instances with passwords and optional usernames (for Redis 6+ Access Control Lists).
+- **Health Checking**: Background loop automatically runs health checks against all backends, marking them online or offline dynamically.
+- **Continuous Integration (CI/CD)**: GitHub Actions workflow to verify formatting, build binaries, run unit/integration tests, and publish cross-platform releases (`linux/amd64` and `darwin/amd64`) on push of a tag (`v*`).
 
 ---
 
 ## Directory Structure
 
 ```text
-├── backend/             # Upstream connection client
-├── config/              # Configuration loader module
-├── parser/              # RESP Protocol Parser and Command Classifier
-├── server/              # Proxy Server TCP listener and Router
-├── docker-compose.yml   # Multi-instance testing environment (Master + Replica)
-├── go.mod               # Go module declaration
-├── main.go              # Proxy entry point
-├── redis-proxy.conf     # Default configuration parameters
-└── test_integration.sh  # Automated integration test runner
+├── backend/               # Upstream TCP connection client
+├── config/                # Configuration parser module
+├── loadbalancer/          # Load-balancing strategy algorithms (random, round-robin)
+├── parser/                # RESP Protocol Parser and Command Classifier
+├── server/                # Proxy Server TCP listener and Router
+├── tests/
+│   ├── docker-compose.yml # Multi-instance Redis stack (1 Master, 2 Replicas with Password Auth)
+│   └── test_integration.sh# Automated integration test runner
+├── .github/
+│   └── workflows/
+│       └── ci.yml         # GitHub Actions CI/CD Pipeline
+├── go.mod                 # Go module declaration
+├── main.go                # CLI Daemon entry point
+└── redis-proxy.conf       # Configuration file template
 ```
 
 ---
@@ -33,72 +43,64 @@ A high-performance Redis routing middleware built in Go. It parses commands usin
 ## Getting Started
 
 ### Prerequisites
-- Go 1.20+
+- Go 1.21+
 - Docker & Docker Compose
-- `redis-tools` (for `redis-cli`)
+- `redis-tools` (for local verification using `redis-cli`)
 
 ### 1. Configuration (`redis-proxy.conf`)
-You can adjust listener addresses and backend targets using the config file:
-```conf
+Adjust proxy listener binding, backend targets, and authentication details:
+```ini
 # Address where proxy listener will bind
 listen_addr = 127.0.0.1:16379
 
 # Backend servers: backend = <address> <role>
 backend = 127.0.0.1:6379 master
 backend = 127.0.0.1:6380 replica
+backend = 127.0.0.1:6381 replica
 
-# Logging level: verbose = true (logs connection details and backend routing) or false (logs only command and status)
-verbose = false
+# Username for authenticating with Redis backends (optional, required if using ACLs)
+# username = myusername
+
+# Password for authenticating with Redis backends
+password = mysecretpassword
+
+# Load balancing strategy for reads: random or round-robin
+load_balance = round-robin
+
+# Logging level: verbose = true (logs connection details and backend routing) or false
+verbose = true
 ```
 
-### 2. Running Local Redis Instances
-Spin up the Redis Master (port `6379`) and Replica (port `6380` replicating master) stack:
-```bash
-docker compose up -d
-```
+### 2. Build & Run the Proxy CLI
 
-### 3. Build & Run the Proxy
-Build the proxy server:
+Build the proxy binary:
 ```bash
 go build -o redis-proxy .
 ```
 
-Start the proxy in the foreground:
+Validate your configuration file:
+```bash
+./redis-proxy check -config redis-proxy.conf
+```
+
+Start the proxy server in the foreground:
 ```bash
 ./redis-proxy start -config redis-proxy.conf
 ```
 
-Start the proxy in the background (daemon mode):
+Start the proxy in daemon mode (background):
 ```bash
 ./redis-proxy start -daemon -config redis-proxy.conf
+```
+
+Trigger zero-downtime hot-reload:
+```bash
+./redis-proxy reload
 ```
 
 Stop the running proxy daemon:
 ```bash
 ./redis-proxy stop
-```
-
-Reload the configuration (zero-downtime hot-reload):
-```bash
-./redis-proxy reload
-```
-
-Verify configuration file validity:
-```bash
-./redis-proxy check -config redis-proxy.conf
-```
-
-### 4. Interacting with the Proxy
-Connect using `redis-cli` on port `16379`:
-```bash
-redis-cli -h 127.0.0.1 -p 16379
-```
-Try running some commands:
-```redis
-127.0.0.1:16379> SET proxytest "hello master"
-OK
-127.0.0.1:16379> GET proxytest
-"hello master"
 ```
 
 ---
@@ -112,7 +114,7 @@ go test -v ./...
 ```
 
 ### Integration Tests
-Run the automated end-to-end integration test. It spins up the Docker containers, waits for replica replication sync, runs sample requests, verifies the split routing in the logs, and tears down the containers on completion:
+Run the automated end-to-end integration test. It spins up the Docker containers, waits for replicas to establish links with the master, starts the proxy, runs write/read commands under both load-balancing strategies (reloading configurations dynamically), and cleans up all Docker resources on completion:
 ```bash
-./test_integration.sh
+./tests/test_integration.sh
 ```
