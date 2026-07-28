@@ -17,6 +17,7 @@ type Config struct {
 	Backends    []BackendConfig
 	LoadBalance string
 	Verbose     bool
+	Username    string
 	Password    string
 }
 
@@ -31,6 +32,7 @@ func LoadConfig(path string) (*Config, error) {
 		ListenAddr:  "127.0.0.1:16379", // default fallback
 		LoadBalance: "random",          // default strategy
 		Verbose:     false,             // default mode
+		Username:    "",                // default no username
 		Password:    "",                // default no password
 	}
 
@@ -60,6 +62,8 @@ func LoadConfig(path string) (*Config, error) {
 			cfg.LoadBalance = val
 		case "verbose":
 			cfg.Verbose = (val == "true")
+		case "username":
+			cfg.Username = val
 		case "password":
 			cfg.Password = val
 		case "backend":

@@ -135,7 +135,7 @@ func handleStart() {
 
 	isVerbose := cfg.Verbose || *verbose
 	log.Printf("Loaded configuration from: %s (verbose=%t)", *configPath, isVerbose)
-	srv, err := server.NewServer(cfg.ListenAddr, cfg.Backends, cfg.LoadBalance, isVerbose, cfg.Password)
+	srv, err := server.NewServer(cfg.ListenAddr, cfg.Backends, cfg.LoadBalance, isVerbose, cfg.Username, cfg.Password)
 	if err != nil {
 		log.Fatalf("Failed to initialize server: %v", err)
 	}
@@ -159,7 +159,7 @@ func handleStart() {
 					continue
 				}
 				isVerboseReload := newCfg.Verbose || *verbose
-				err = srv.Reload(newCfg.Backends, newCfg.LoadBalance, isVerboseReload, newCfg.Password)
+				err = srv.Reload(newCfg.Backends, newCfg.LoadBalance, isVerboseReload, newCfg.Username, newCfg.Password)
 				if err != nil {
 					log.Printf("Failed to reload server: %v", err)
 				}

@@ -104,6 +104,31 @@ backend = 127.0.0.1:6379 master
 	if cfgPassword.Password != "testsecretpassword" {
 		t.Errorf("expected password to be 'testsecretpassword', got '%s'", cfgPassword.Password)
 	}
+
+	// Test case 5: Parsing username and password settings
+	contentUsername := `
+listen_addr = 127.0.0.1:16379
+username = testuser
+password = testsecretpassword
+backend = 127.0.0.1:6379 master
+`
+	pathUsername := filepath.Join(tmpDir, "proxy_username.conf")
+	err = os.WriteFile(pathUsername, []byte(contentUsername), 0644)
+	if err != nil {
+		t.Fatalf("failed to write temp config: %v", err)
+	}
+
+	cfgUsername, err := LoadConfig(pathUsername)
+	if err != nil {
+		t.Fatalf("failed to load valid config with username: %v", err)
+	}
+
+	if cfgUsername.Username != "testuser" {
+		t.Errorf("expected username to be 'testuser', got '%s'", cfgUsername.Username)
+	}
+	if cfgUsername.Password != "testsecretpassword" {
+		t.Errorf("expected password to be 'testsecretpassword', got '%s'", cfgUsername.Password)
+	}
 }
 
 func TestLoadConfigFileNotFound(t *testing.T) {

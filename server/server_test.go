@@ -82,7 +82,7 @@ func TestServerHealthCheckingLoop(t *testing.T) {
 		{Addr: l.Addr().String(), Role: "replica"},
 	}
 
-	srv, err := NewServer("127.0.0.1:16381", backendConfigs, "random", true, "")
+	srv, err := NewServer("127.0.0.1:16381", backendConfigs, "random", true, "", "")
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestServerLoadBalancing(t *testing.T) {
 		{Addr: m2.Addr().String(), Role: "replica"},
 	}
 
-	srv, err := NewServer("127.0.0.1:0", backendConfigs, "random", true, "")
+	srv, err := NewServer("127.0.0.1:0", backendConfigs, "random", true, "", "")
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestServerLoadBalancingRoundRobin(t *testing.T) {
 		{Addr: m2.Addr().String(), Role: "replica"},
 	}
 
-	srv, err := NewServer("127.0.0.1:0", backendConfigs, "round-robin", true, "")
+	srv, err := NewServer("127.0.0.1:0", backendConfigs, "round-robin", true, "", "")
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}

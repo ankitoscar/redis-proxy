@@ -12,7 +12,7 @@ type Client struct {
 	parser *parser.Parser
 }
 
-func Connect(addr string, password string) (*Client, error) {
+func Connect(addr string, username string, password string) (*Client, error) {
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return nil, err
@@ -22,12 +22,22 @@ func Connect(addr string, password string) (*Client, error) {
 		parser: parser.NewParser(conn),
 	}
 	if password != "" {
-		authCmd := parser.Value{
-			Type: parser.TypeArray,
-			Array: []parser.Value{
+		var authArgs []parser.Value
+		if username != "" {
+			authArgs = []parser.Value{
+				{Type: parser.TypeBulkString, Str: "AUTH"},
+				{Type: parser.TypeBulkString, Str: username},
+				{Type: parser.TypeBulkString, Str: password},
+			}
+		} else {
+			authArgs = []parser.Value{
 				{Type: parser.TypeBulkString, Str: "AUTH"},
 				{Type: parser.TypeBulkString, Str: password},
-			},
+			}
+		}
+		authCmd := parser.Value{
+			Type:  parser.TypeArray,
+			Array: authArgs,
 		}
 		resp, err := client.Execute(authCmd)
 		if err != nil {
