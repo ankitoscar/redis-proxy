@@ -38,6 +38,17 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y redis-tools
 
+    - name: Create redis-proxy.conf
+      run: |
+        cat <<EOF > redis-proxy.conf
+        listen_addr = 127.0.0.1:16379
+        backend = 127.0.0.1:6379 master
+        backend = 127.0.0.1:6380 replica
+        backend = 127.0.0.1:6381 replica
+        password = mysecretpassword
+        load_balance = round-robin
+        EOF
+
     - name: Run Integration Tests
       run: |
         chmod +x tests/test_integration.sh
