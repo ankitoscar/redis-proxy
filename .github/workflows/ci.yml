@@ -1,0 +1,44 @@
+name: Redis Proxy CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
+
+    - name: Verify code formatting
+      run: |
+        if [ -n "$(gofmt -l .)" ]; then
+          echo "The following files are not formatted correctly:"
+          gofmt -l .
+          exit 1
+        fi
+
+    - name: Build Redis Proxy
+      run: go build -v -o redis-proxy main.go
+
+    - name: Run Go Unit Tests
+      run: go test -v ./...
+
+    - name: Install redis-cli
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y redis-tools
+
+    - name: Run Integration Tests
+      run: |
+        chmod +x tests/test_integration.sh
+        ./tests/test_integration.sh

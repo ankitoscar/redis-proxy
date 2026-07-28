@@ -377,4 +377,3 @@ func formatCommand(val parser.Value) string {
 	}
 	return fmt.Sprintf("%v", val)
 }
-

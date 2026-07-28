@@ -3,8 +3,8 @@ package backend
 import (
 	"fmt"
 	"net"
-	"strings"
 	"redis-proxy/parser"
+	"strings"
 )
 
 type Client struct {
