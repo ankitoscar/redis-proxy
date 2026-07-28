@@ -78,7 +78,7 @@ done
 echo " Replica links are UP and synchronized!"
 
 echo "=== 2. Building the Redis Proxy ==="
-/usr/local/go/bin/go build -o redis-proxy .
+go build -o redis-proxy .
 
 echo "=== 3. Starting the Redis Proxy CLI Daemon (Random Load Balancing) ==="
 # Ensure conf starts with random
