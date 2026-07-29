@@ -103,6 +103,31 @@ Stop the running proxy daemon:
 ./redis-proxy stop
 ```
 
+### 3. Running with Docker (Multi-Stage Build)
+
+We also provide a multi-stage `Dockerfile` to build and run the Redis Proxy in a containerized environment.
+
+#### Build the Docker image:
+```bash
+docker build -t redis-proxy:latest .
+```
+
+#### Run the configuration check inside the container:
+```bash
+docker run --rm -v $(pwd)/redis-proxy.conf:/etc/redis-proxy/redis-proxy.conf redis-proxy:latest check -config /etc/redis-proxy/redis-proxy.conf
+```
+
+#### Run the Redis Proxy container:
+> [!NOTE]
+> Ensure that your config file (`redis-proxy.conf`) has `listen_addr = 0.0.0.0:16379` instead of `127.0.0.1:16379` so that it is accessible outside the container.
+
+```bash
+docker run -d --name redis-proxy \
+  -p 16379:16379 \
+  -v $(pwd)/redis-proxy.conf:/etc/redis-proxy/redis-proxy.conf \
+  redis-proxy:latest
+```
+
 ---
 
 ## Verification & Testing
