@@ -38,7 +38,7 @@ func main() {
 	key := "sample_key:go"
 	val := fmt.Sprintf("hello-from-go-at-%d", time.Now().Unix())
 	fmt.Printf("Writing to proxy: SET %s -> %s (Routed to Master)\n", key, val)
-	
+
 	setErr := rdb.Set(ctx, key, val, 0).Err()
 	if setErr != nil {
 		log.Fatalf("SET failed: %v", setErr)

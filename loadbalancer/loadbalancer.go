@@ -11,11 +11,11 @@ import (
 type Strategy string
 
 const (
-	StrategyRandom              Strategy = "random"
-	StrategyRoundRobin          Strategy = "round-robin"
-	StrategyWeightedRandom      Strategy = "weighted-random"
-	StrategyWeightedRoundRobin  Strategy = "weighted-round-robin"
-	StrategyWeighted            Strategy = "weighted" // alias for weighted-round-robin
+	StrategyRandom             Strategy = "random"
+	StrategyRoundRobin         Strategy = "round-robin"
+	StrategyWeightedRandom     Strategy = "weighted-random"
+	StrategyWeightedRoundRobin Strategy = "weighted-round-robin"
+	StrategyWeighted           Strategy = "weighted" // alias for weighted-round-robin
 )
 
 type LoadBalancer interface {
