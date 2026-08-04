@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  redis-master:
+    image: redis:latest
+    container_name: redis-master-e2e
+    command: redis-server --requirepass e2e_secret_password
+    ports:
+      - "6379:6379"
+
+  redis-replica1:
+    image: redis:latest
+    container_name: redis-replica1-e2e
+    command: redis-server --requirepass e2e_secret_password --masterauth e2e_secret_password --replicaof redis-master-e2e 6379
+    ports:
+      - "6380:6379"
+    depends_on:
+      - redis-master
+
+  redis-replica2:
+    image: redis:latest
+    container_name: redis-replica2-e2e
+    command: redis-server --requirepass e2e_secret_password --masterauth e2e_secret_password --replicaof redis-master-e2e 6379
+    ports:
+      - "6381:6379"
+    depends_on:
+      - redis-master
+
+  redis-replica3:
+    image: redis:latest
+    container_name: redis-replica3-e2e
+    command: redis-server --requirepass e2e_secret_password --masterauth e2e_secret_password --replicaof redis-master-e2e 6379
+    ports:
+      - "6382:6379"
+    depends_on:
+      - redis-master

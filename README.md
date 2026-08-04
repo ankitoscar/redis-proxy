@@ -130,6 +130,17 @@ docker run -d --name redis-proxy \
 
 ---
 
+## Client Integration Examples
+
+We provide code examples for integrating popular Redis client libraries with the proxy:
+- **Python**: Using `redis-py`
+- **Go**: Using `go-redis`
+- **JavaScript**: Using `redis` (Node.js)
+
+See the [examples/README.md](file:///media/ankit/Data/Projects/redis_proxy/examples/README.md) directory for details on how to set up and run these examples.
+
+---
+
 ## Verification & Testing
 
 ### Unit Tests
