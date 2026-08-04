@@ -33,8 +33,8 @@ backend = 127.0.0.1:6380 replica
 		ListenAddr:  "127.0.0.1:16379",
 		LoadBalance: "random",
 		Backends: []BackendConfig{
-			{Addr: "127.0.0.1:6379", Role: "master"},
-			{Addr: "127.0.0.1:6380", Role: "replica"},
+			{Addr: "127.0.0.1:6379", Role: "master", Weight: 1},
+			{Addr: "127.0.0.1:6380", Role: "replica", Weight: 1},
 		},
 	}
 
@@ -131,6 +131,40 @@ backend = 127.0.0.1:6379 master
 	}
 }
 
+func TestLoadConfigWeightsSuccess(t *testing.T) {
+	content := `
+listen_addr = 127.0.0.1:16379
+backend = 127.0.0.1:6379 master 5
+backend = 127.0.0.1:6380 replica 10
+backend = 127.0.0.1:6381 replica
+`
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "proxy_weights.conf")
+	err := os.WriteFile(path, []byte(content), 0644)
+	if err != nil {
+		t.Fatalf("failed to write temp config: %v", err)
+	}
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("failed to load valid config with weights: %v", err)
+	}
+
+	expected := &Config{
+		ListenAddr:  "127.0.0.1:16379",
+		LoadBalance: "random",
+		Backends: []BackendConfig{
+			{Addr: "127.0.0.1:6379", Role: "master", Weight: 5},
+			{Addr: "127.0.0.1:6380", Role: "replica", Weight: 10},
+			{Addr: "127.0.0.1:6381", Role: "replica", Weight: 1},
+		},
+	}
+
+	if !reflect.DeepEqual(cfg, expected) {
+		t.Errorf("expected %+v, got %+v", expected, cfg)
+	}
+}
+
 func TestLoadConfigFileNotFound(t *testing.T) {
 	_, err := LoadConfig("non_existent_file.conf")
 	if err == nil {
@@ -152,8 +186,8 @@ func TestLoadConfigErrors(t *testing.T) {
 			content: "unknown_key = value",
 		},
 		{
-			name:    "Invalid backend format",
-			content: "backend = 127.0.0.1:6379 master extra_arg",
+			name:    "Invalid backend format extra args",
+			content: "backend = 127.0.0.1:6379 master 5 extra_arg",
 		},
 		{
 			name:    "Missing role in backend",
@@ -162,6 +196,18 @@ func TestLoadConfigErrors(t *testing.T) {
 		{
 			name:    "No backends defined",
 			content: "listen_addr = 127.0.0.1:16379",
+		},
+		{
+			name:    "Negative backend weight",
+			content: "backend = 127.0.0.1:6379 master -5",
+		},
+		{
+			name:    "Zero backend weight",
+			content: "backend = 127.0.0.1:6379 master 0",
+		},
+		{
+			name:    "Non-integer backend weight",
+			content: "backend = 127.0.0.1:6379 master abc",
 		},
 	}
 

@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
 type BackendConfig struct {
-	Addr string
-	Role string
+	Addr   string
+	Role   string
+	Weight int
 }
 
 type Config struct {
@@ -67,14 +69,23 @@ func LoadConfig(path string) (*Config, error) {
 		case "password":
 			cfg.Password = val
 		case "backend":
-			// Backend format: "addr role"
+			// Backend format: "addr role [weight]"
 			backendParts := strings.Fields(val)
-			if len(backendParts) != 2 {
-				return nil, fmt.Errorf("line %d: invalid backend format, expected 'addr role'", lineNum)
+			if len(backendParts) < 2 || len(backendParts) > 3 {
+				return nil, fmt.Errorf("line %d: invalid backend format, expected 'addr role [weight]'", lineNum)
+			}
+			weight := 1
+			if len(backendParts) == 3 {
+				w, err := strconv.Atoi(backendParts[2])
+				if err != nil || w <= 0 {
+					return nil, fmt.Errorf("line %d: invalid backend weight %q, must be a positive integer", lineNum, backendParts[2])
+				}
+				weight = w
 			}
 			cfg.Backends = append(cfg.Backends, BackendConfig{
-				Addr: backendParts[0],
-				Role: backendParts[1],
+				Addr:   backendParts[0],
+				Role:   backendParts[1],
+				Weight: weight,
 			})
 		default:
 			return nil, fmt.Errorf("line %d: unknown configuration key %q", lineNum, key)
