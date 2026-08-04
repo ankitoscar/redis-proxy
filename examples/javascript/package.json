@@ -1,0 +1,10 @@
+{
+  "name": "redis-proxy-examples-javascript",
+  "version": "1.0.0",
+  "description": "JavaScript Redis Proxy Client Example",
+  "main": "client.js",
+  "type": "commonjs",
+  "dependencies": {
+    "redis": "^4.6.13"
+  }
+}
